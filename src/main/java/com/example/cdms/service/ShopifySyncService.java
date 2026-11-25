@@ -65,14 +65,37 @@ public class ShopifySyncService {
                         continue;
                     }
 
-                    ShopifyProductDto.VariantNode node = nodes.get(0);
-                    Integer qty = node.inventoryQuantity() == null ? 0 : node.inventoryQuantity();
-                    tenantProductRepository.upsertFromShopify(
-                            tenantId,
-                            product,
-                            node.sku() == null ? "UNKNOWN" : node.sku(),
-                            node.price() == null ? "0" : node.price(),
-                            qty);
+                ShopifyProductDto.VariantNode node = nodes.get(0);
+                String sku = node.sku() == null || node.sku().isBlank() ? "UNKNOWN" : node.sku();
+                String price = node.price() == null || node.price().isBlank() ? "0" : node.price();
+                Integer qty = node.inventoryQuantity() == null ? 0 : node.inventoryQuantity();
+
+                if (sku.equals("UNKNOWN")) {
+                    log.warn("Product {} has invalid SKU, skipping", product.id());
+                    failed++;
+                    continue;
+                }
+
+                try {
+                    Double.parseDouble(price);
+                } catch (NumberFormatException e) {
+                    log.warn("Product {} has invalid price '{}', skipping", product.id(), price);
+                    failed++;
+                    continue;
+                }
+
+                if (qty < 0) {
+                    log.warn("Product {} has negative quantity {}, skipping", product.id(), qty);
+                    failed++;
+                    continue;
+                }
+
+                tenantProductRepository.upsertFromShopify(
+                        tenantId,
+                        product,
+                        sku,
+                        price,
+                        qty);
 
                     MasterProductDto masterDto = new MasterProductDto(
                             node.sku() == null ? "UNKNOWN" : node.sku(),
